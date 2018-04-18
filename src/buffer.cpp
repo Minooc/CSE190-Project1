@@ -40,11 +40,56 @@ BufMgr::~BufMgr() {
 
 void BufMgr::advanceClock()
 {
-
+	clockHand++;
+	clockHand = clockHand % numBufs;
 }
 
 void BufMgr::allocBuf(FrameId & frame) 
 {
+	bool frameFound = false;
+	while(!frameFound){
+		advanceClock();
+
+		if(bufDescTable[clockHand].valid){
+
+			if(!bufDescTable[clockHand].refbit){
+
+				if(bufDescTable[clockHand].pinCnt == 0){
+					frameFound = true;
+					frame = bufDescTable[clockHand].frameNo;
+				
+					if(bufDescTable[clockHand].dirty == 0){
+						//clear the frame in the bufPool
+						bufDescTable[clockHand].Clear();
+					}
+					else{
+						//flush page to disk, then clear the frame
+						bufDescTable[clockHand].file->writePage(bufPool[clockHand]);				
+						bufDescTable[clockHand].Clear();
+					}
+
+				}
+
+				else{
+					//advance clock pointer
+					advanceClock();
+				}
+			}
+
+			else {
+				//clear refbit
+				bufDescTable[clockHand].refbit = 0;
+			}
+		}
+
+		else {
+			//Call Set() on the frame??
+			frameFound = true;
+			bufDescTable[clockHand].valid = 1;
+			frame = bufDescTable[clockHand].frameNo;
+			
+		}
+	}
 }
 
 	
@@ -63,6 +108,9 @@ void BufMgr::flushFile(const File* file)
 
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
+	Page newPage = file->allocatePage();
+	//Allocate the new page in the buffer pool.
+	//allocBuf();
 }
 
 void BufMgr::disposePage(File* file, const PageId PageNo)
