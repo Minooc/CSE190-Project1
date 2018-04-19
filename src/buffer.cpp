@@ -97,12 +97,45 @@ void BufMgr::allocBuf(FrameId & frame)
 
 	
 void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
-{
+{	
+	FrameId frame;
+	try {
+
+		hashTable->lookup(file, pageNo, frame);
+
+		// page found on buffer pool
+		
+		bufDescTable[frame].refbit = true;	
+		bufDescTable[frame].pinCnt ++;
+		page = &bufPool[frame];
+
+	}
+	catch (const HashNotFoundException& e) {
+		// page is not on buffer pool
+
+		allocBuf(frame);
+		file->readPage(pageNo);
+		hashTable->insert(file, pageNo, frame);
+		bufDescTable[frame].Set(file, pageNo);
+
+		page = &bufPool[frame];
+
+	}
 }
 
 
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
+	for (FrameId i=0; i < sizeof(bufDescTable); i++) {
+		if (bufDescTable[i].file == file && bufDescTable[i].pageNo == pageNo) {
+
+			/************************************* first parameter? *******************/
+			if (bufDescTable[i].pinCnt == 0) throw PageNotPinnedException("", pageNo, i);
+
+			bufDescTable[i].pinCnt --;	
+			if (dirty == true) bufDescTable[i].dirty = true;
+		}
+	}
 }
 
 void BufMgr::flushFile(const File* file) 
