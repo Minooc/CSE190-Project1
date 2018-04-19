@@ -46,33 +46,36 @@ void BufMgr::advanceClock()
 
 void BufMgr::allocBuf(FrameId & frame) 
 {
+	frame = -1; //Default frameId for not found
+	FrameId initial = clockHand;
 	bool frameFound = false;
 	while(!frameFound){
 		advanceClock();
+		
+		//Check if the clockHand already did a full rotation
+		if(initial == clockHand){
+			break;
+		}
 
+		//Check if the frame is valid
 		if(bufDescTable[clockHand].valid){
 
+			//Check the refbit of the frame
 			if(!bufDescTable[clockHand].refbit){
 
+				//Check the pin count of the frame
 				if(bufDescTable[clockHand].pinCnt == 0){
 					frameFound = true;
 					frame = bufDescTable[clockHand].frameNo;
 				
-					if(bufDescTable[clockHand].dirty == 0){
-						//clear the frame in the bufPool
-						bufDescTable[clockHand].Clear();
+					//Check if the frame is dirty	
+					if(bufDescTable[clockHand].dirty == 1){
+						//Write the frame(page) to the disk
+						bufDescTable[clockHand].file->writePage(bufPool[clockHand]);
 					}
-					else{
-						//flush page to disk, then clear the frame
-						bufDescTable[clockHand].file->writePage(bufPool[clockHand]);				
-						bufDescTable[clockHand].Clear();
-					}
-
-				}
-
-				else{
-					//advance clock pointer
-					advanceClock();
+					//Reset the frame	
+					bufDescTable[clockHand].Clear();
+					break;
 				}
 			}
 
@@ -83,13 +86,13 @@ void BufMgr::allocBuf(FrameId & frame)
 		}
 
 		else {
-			//Call Set() on the frame??
 			frameFound = true;
 			bufDescTable[clockHand].valid = 1;
 			frame = bufDescTable[clockHand].frameNo;
-			
+			break;
 		}
 	}
+
 }
 
 	
@@ -104,18 +107,43 @@ void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty)
 
 void BufMgr::flushFile(const File* file) 
 {
+	
+
 }
 
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
+	FrameId currFrame;
 	Page newPage = file->allocatePage();
 	//Allocate the new page in the buffer pool.
-	//allocBuf();
+	allocBuf(currFrame);
+	
+	if(currFrame != -1){
+		bufDescTable[currFrame].Set(file,pageNo);
+		hashTable->insert(file,pageNo,currFrame);
+	}
 }
 
 void BufMgr::disposePage(File* file, const PageId PageNo)
 {
-    
+
+	//Remove the page from the file
+	file->deletePage(PageNo);
+	
+	//Remove the associated frame in the bufferPool
+	for(uint32_t i = 0; i < numBufs; i++){
+		if(bufDescTable[i].file == file && bufDescTable[i].pageNo == PageNo
+			&&bufDescTable[i].pinCnt == 0){
+			//Remove from hashTable	
+			hashTable->remove(file, PageNo);
+			//Clear Frame
+			bufDescTable[i].Clear();
+			//Remove the page from buffer pool or no need?
+			//bufPool[i] = NULL;
+			break;
+		}
+	}
+	
 }
 
 void BufMgr::printSelf(void) 
