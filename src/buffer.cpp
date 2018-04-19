@@ -115,10 +115,19 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 {
 	FrameId currFrame;
 	Page newPage = file->allocatePage();
+	
 	//Allocate the new page in the buffer pool.
 	allocBuf(currFrame);
 	
 	if(currFrame != -1){
+		//Assign bufPool with the newly created page
+		bufPool[currFrame] = newPage;
+		
+		//Set the pageNo and page ptr reference with the new page
+		pageNo = bufPool[currFrame].page_number();
+		page = &bufPool[currFrame];
+	
+		//Set new file and pageNo to the frame and hashTable
 		bufDescTable[currFrame].Set(file,pageNo);
 		hashTable->insert(file,pageNo,currFrame);
 	}
@@ -136,10 +145,11 @@ void BufMgr::disposePage(File* file, const PageId PageNo)
 			&&bufDescTable[i].pinCnt == 0){
 			//Remove from hashTable	
 			hashTable->remove(file, PageNo);
+			
 			//Clear Frame
 			bufDescTable[i].Clear();
+			
 			//Remove the page from buffer pool or no need?
-			//bufPool[i] = NULL;
 			break;
 		}
 	}
