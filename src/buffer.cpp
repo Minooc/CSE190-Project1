@@ -36,6 +36,7 @@ BufMgr::BufMgr(std::uint32_t bufs)
 
 
 BufMgr::~BufMgr() {
+	printf("destructor called\n");
 }
 
 void BufMgr::advanceClock()
@@ -52,10 +53,12 @@ void BufMgr::allocBuf(FrameId & frame)
 	while(!frameFound){
 		advanceClock();
 		
+/*
 		//Check if the clockHand already did a full rotation
 		if(initial == clockHand){
 			break;
 		}
+*/
 
 		//Check if the frame is valid
 		if(bufDescTable[clockHand].valid){
@@ -67,6 +70,7 @@ void BufMgr::allocBuf(FrameId & frame)
 				if(bufDescTable[clockHand].pinCnt == 0){
 					frameFound = true;
 					frame = bufDescTable[clockHand].frameNo;
+					hashTable->remove(bufDescTable[clockHand].file, bufDescTable[clockHand].pageNo);
 				
 					//Check if the frame is dirty	
 					if(bufDescTable[clockHand].dirty == 1){
@@ -82,6 +86,7 @@ void BufMgr::allocBuf(FrameId & frame)
 			else {
 				//clear refbit
 				bufDescTable[clockHand].refbit = 0;
+				continue;
 			}
 		}
 
@@ -113,12 +118,19 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 	catch (const HashNotFoundException& e) {
 		// page is not on buffer pool
 
-		allocBuf(frame);
-		file->readPage(pageNo);
-		hashTable->insert(file, pageNo, frame);
-		bufDescTable[frame].Set(file, pageNo);
+		FrameId newFrame;
+		Page newPage;
 
-		page = &bufPool[frame];
+		allocBuf(newFrame);
+
+		// read page from disk into buffer pool
+		newPage = file->readPage(pageNo);
+		bufPool[newFrame] = newPage;
+
+		hashTable->insert(file, pageNo, newFrame);
+		bufDescTable[newFrame].Set(file, pageNo);
+
+		page = &bufPool[newFrame];
 
 	}
 }
@@ -126,11 +138,10 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
-	for (FrameId i=0; i < sizeof(bufDescTable); i++) {
+	for (FrameId i=0; i < numBufs; i++) {
 		if (bufDescTable[i].file == file && bufDescTable[i].pageNo == pageNo) {
 
-			/************************************* first parameter? *******************/
-			if (bufDescTable[i].pinCnt == 0) throw PageNotPinnedException("", pageNo, i);
+			if (bufDescTable[i].pinCnt == 0) throw PageNotPinnedException(file->filename(), pageNo, i);
 
 			bufDescTable[i].pinCnt --;	
 			if (dirty == true) bufDescTable[i].dirty = true;
@@ -151,7 +162,7 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 	
 	//Allocate the new page in the buffer pool.
 	allocBuf(currFrame);
-	
+
 	if(currFrame != -1){
 		//Assign bufPool with the newly created page
 		bufPool[currFrame] = newPage;
