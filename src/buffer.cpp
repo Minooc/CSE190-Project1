@@ -32,6 +32,8 @@ BufMgr::BufMgr(std::uint32_t bufs)
   hashTable = new BufHashTbl (htsize);  // allocate the buffer hash table
 
   clockHand = bufs - 1;
+
+  frameLeft = numBufs;
 }
 
 
@@ -48,13 +50,14 @@ void BufMgr::advanceClock()
 void BufMgr::allocBuf(FrameId & frame) 
 {
 	frame = -1; //Default frameId for not found
-	FrameId initial = clockHand;
 	bool frameFound = false;
+
+
 	while(!frameFound){
 		advanceClock();
-		
-/*
-		//Check if the clockHand already did a full rotation
+
+
+/*		//Check if the clockHand already did a full rotation
 		if(initial == clockHand){
 			break;
 		}
@@ -80,6 +83,11 @@ void BufMgr::allocBuf(FrameId & frame)
 					//Reset the frame	
 					bufDescTable[clockHand].Clear();
 					break;
+				}
+				else {
+					frameLeft--;
+					if (frameLeft == 0) throw BufferExceededException();
+					continue;
 				}
 			}
 
@@ -144,6 +152,7 @@ void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty)
 			if (bufDescTable[i].pinCnt == 0) throw PageNotPinnedException(file->filename(), pageNo, i);
 
 			bufDescTable[i].pinCnt --;	
+			if (bufDescTable[i].pinCnt == 0) frameLeft ++;
 			if (dirty == true) bufDescTable[i].dirty = true;
 		}
 	}

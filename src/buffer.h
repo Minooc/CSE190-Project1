@@ -160,6 +160,8 @@ struct BufStats
 class BufMgr 
 {
  private:
+  std::uint32_t frameLeft;	// for test
+
 	/**
    * Current position of clockhand in our buffer pool
 	 */
