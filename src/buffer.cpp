@@ -155,9 +155,10 @@ void BufMgr::flushFile(const File* file)
 {
 	for (FrameId i=0; i < numBufs; i++){
 		if(bufDescTable[i].file == file){
-			BufDesc desc = bufDescTable[i];
-			
-			//Check if the frame is pinned or valid before getting flushed
+
+			BufDesc desc = bufDescTable[i];			
+	
+			//Check if the frame is pinned, invalid or not dirty before getting flushed
 			if(desc.pinCnt != 0) throw PagePinnedException(file->filename(),desc.pageNo,desc.frameNo);
 			if(!desc.valid) throw BadBufferException(desc.frameNo,desc.dirty,desc.valid,desc.refbit);
 			if(desc.dirty)	desc.file->writePage(bufPool[i]);
@@ -172,7 +173,7 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 	FrameId currFrame;
 	Page newPage = file->allocatePage();
 	
-	//Allocate the new page in the buffer pool.
+	//Allocate the new page in the buffer pool
 	allocBuf(currFrame);
 	bufPool[currFrame] = newPage;
 		
@@ -196,7 +197,7 @@ void BufMgr::disposePage(File* file, const PageId PageNo)
 		if(bufDescTable[i].file == file && bufDescTable[i].pageNo == PageNo
 			&& bufDescTable[i].pinCnt == 0){
 			hashTable->remove(file, PageNo);
-			bufDescTable[i].Clear(); //rest buffer frame
+			bufDescTable[i].Clear(); //reset buffer frame
 			break;
 		}
 	}
