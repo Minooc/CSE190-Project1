@@ -33,12 +33,11 @@ BufMgr::BufMgr(std::uint32_t bufs)
 
   clockHand = bufs - 1;
 
-  frameLeft = numBufs;
 }
 
 
 BufMgr::~BufMgr() {
-	printf("destructor called\n");
+//	printf("destructor called\n");
 	delete[] bufDescTable;
 	delete[] bufPool;
 	delete hashTable;
@@ -54,8 +53,14 @@ void BufMgr::allocBuf(FrameId & frame)
 {
 	bool frameFound = false;
 
+	// frameLeft is used to check if there's any frame to allocate.
+	// Initially set to number of buffers, this value will be decreased when any pinned frame is found.
+	// If every frames are pinned, frameLeft will become 0 which means there's no more frame to allocate.
+	int frameLeft = numBufs;
+
 	while(!frameFound){
 		advanceClock();
+
 
 		//Check if the frame is valid
 		if(bufDescTable[clockHand].valid){
@@ -67,8 +72,9 @@ void BufMgr::allocBuf(FrameId & frame)
 				if(bufDescTable[clockHand].pinCnt == 0){
 					frameFound = true;
 					frame = bufDescTable[clockHand].frameNo;
+
 					hashTable->remove(bufDescTable[clockHand].file, bufDescTable[clockHand].pageNo);
-				
+
 					//Check if the frame is dirty	
 					if(bufDescTable[clockHand].dirty == 1){
 						//Write the frame(page) to the disk
@@ -79,21 +85,27 @@ void BufMgr::allocBuf(FrameId & frame)
 					break;
 				}
 				else {
-					//No more frame available
-					frameLeft--;
+
+					// When no frame is available, throw exception
 					if (frameLeft == 0) throw BufferExceededException();
+					frameLeft--;
+
 					continue;
 				}
 			}
 			else {
-				//clear refbit
+				/* When refbit is 1 */
+
+				// clear refbit and go again
 				bufDescTable[clockHand].refbit = 0;
 				continue;
 			}
 		}
 		else {
+			/* When valid is not set */
+
 			frameFound = true;
-			bufDescTable[clockHand].valid = 1;
+//			bufDescTable[clockHand].valid = 1;
 			frame = bufDescTable[clockHand].frameNo;
 			break;
 		}
@@ -109,26 +121,33 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 
 		hashTable->lookup(file, pageNo, frame);
 
-		// page found on buffer pool
-		
+		/* When page found on buffer pool */
+
 		bufDescTable[frame].refbit = true;	
 		bufDescTable[frame].pinCnt ++;
+
 		page = &bufPool[frame];
 
 	}
 	catch (const HashNotFoundException& e) {
-		// page is not on buffer pool
+
+		/* When page is not on buffer pool */
 
 		FrameId newFrame;
 		Page newPage;
 
+		// Allocate buffer frame
 		allocBuf(newFrame);
 
 		// read page from disk into buffer pool
 		newPage = file->readPage(pageNo);
 		bufPool[newFrame] = newPage;
+		bufDescTable[newFrame].valid = 1;
 
+		// Insert the page into the hashtable
 		hashTable->insert(file, pageNo, newFrame);
+
+		// Invoke Set() to set it properly
 		bufDescTable[newFrame].Set(file, pageNo);
 
 		page = &bufPool[newFrame];
@@ -139,13 +158,17 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 
 void BufMgr::unPinPage(File* file, const PageId pageNo, const bool dirty) 
 {
+	// find appropriate frame containing (file, pageNo)
 	for (FrameId i=0; i < numBufs; i++) {
 		if (bufDescTable[i].file == file && bufDescTable[i].pageNo == pageNo) {
 
+			// If pin count is already 0, throw error
 			if (bufDescTable[i].pinCnt == 0) throw PageNotPinnedException(file->filename(), pageNo, i);
 
+			// Decrement pin count
 			bufDescTable[i].pinCnt --;	
-			if (bufDescTable[i].pinCnt == 0) frameLeft ++;
+
+			// set the dirty bit
 			if (dirty == true) bufDescTable[i].dirty = true;
 		}
 	}
@@ -176,6 +199,7 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 	//Allocate the new page in the buffer pool
 	allocBuf(currFrame);
 	bufPool[currFrame] = newPage;
+	bufDescTable[currFrame].valid = 1;
 		
 	//Set the pageNo and page ptr reference with the new page
 	pageNo = bufPool[currFrame].page_number();
@@ -184,6 +208,7 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 	//Set new file and pageNo to the frame
 	bufDescTable[currFrame].Set(file,pageNo);
 	hashTable->insert(file,pageNo,currFrame);
+	
 }
 
 void BufMgr::disposePage(File* file, const PageId PageNo)
@@ -221,5 +246,6 @@ void BufMgr::printSelf(void)
 
 	std::cout << "Total Number of Valid Frames:" << validFrames << "\n";
 }
+
 
 }

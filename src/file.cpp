@@ -162,7 +162,7 @@ Page File::readPage(const PageId page_number, const bool allow_free) const {
   if (!allow_free && !page.isUsed()) {
     throw InvalidPageException(page_number, filename_);
   }
-
+  
   return page;
 }
 
