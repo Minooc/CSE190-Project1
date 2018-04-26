@@ -37,7 +37,6 @@ BufMgr::BufMgr(std::uint32_t bufs)
 
 
 BufMgr::~BufMgr() {
-//	printf("destructor called\n");
 	delete[] bufDescTable;
 	delete[] bufPool;
 	delete hashTable;
@@ -45,6 +44,7 @@ BufMgr::~BufMgr() {
 
 void BufMgr::advanceClock()
 {
+	// Move clock hand
 	clockHand++;
 	clockHand = clockHand % numBufs;
 }
@@ -59,8 +59,8 @@ void BufMgr::allocBuf(FrameId & frame)
 	int frameLeft = numBufs;
 
 	while(!frameFound){
-		advanceClock();
-
+		// advance clock hand
+		advanceClock();		
 
 		//Check if the frame is valid
 		if(bufDescTable[clockHand].valid){
@@ -105,7 +105,6 @@ void BufMgr::allocBuf(FrameId & frame)
 			/* When valid is not set */
 
 			frameFound = true;
-//			bufDescTable[clockHand].valid = 1;
 			frame = bufDescTable[clockHand].frameNo;
 			break;
 		}
@@ -139,7 +138,7 @@ void BufMgr::readPage(File* file, const PageId pageNo, Page*& page)
 		// Allocate buffer frame
 		allocBuf(newFrame);
 
-		// read page from disk into buffer pool
+		// Read page from disk into buffer pool
 		newPage = file->readPage(pageNo);
 		bufPool[newFrame] = newPage;
 		bufDescTable[newFrame].valid = 1;
@@ -178,34 +177,38 @@ void BufMgr::flushFile(const File* file)
 {
 	for (FrameId i=0; i < numBufs; i++){
 		if(bufDescTable[i].file == file){
-
+				
+			// Create copy of buffer desc instance associated with the file
 			BufDesc desc = bufDescTable[i];			
 	
-			//Check if the frame is pinned, invalid or not dirty before getting flushed
+			// Check if the frame is pinned
 			if(desc.pinCnt != 0) throw PagePinnedException(file->filename(),desc.pageNo,desc.frameNo);
+
+			// Check if the frame is valid
 			if(!desc.valid) throw BadBufferException(desc.frameNo,desc.dirty,desc.valid,desc.refbit);
+		
+			// Check if the frame is dirty before flushing
 			if(desc.dirty)	desc.file->writePage(bufPool[i]);
 		}
-		
 	}	
-
 }
 
 void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page) 
 {
-	FrameId currFrame;
+	// Allocate new page in the file
+	FrameId currFrame; 
 	Page newPage = file->allocatePage();
 	
-	//Allocate the new page in the buffer pool
+	// Allocate the new page in the buffer pool
 	allocBuf(currFrame);
 	bufPool[currFrame] = newPage;
 	bufDescTable[currFrame].valid = 1;
 		
-	//Set the pageNo and page ptr reference with the new page
+	// Set the pageNo and page ptr reference with the new page
 	pageNo = bufPool[currFrame].page_number();
 	page = &bufPool[currFrame];
 	
-	//Set new file and pageNo to the frame
+	// Set new file and pageNo to the frame
 	bufDescTable[currFrame].Set(file,pageNo);
 	hashTable->insert(file,pageNo,currFrame);
 	
@@ -214,15 +217,16 @@ void BufMgr::allocPage(File* file, PageId &pageNo, Page*& page)
 void BufMgr::disposePage(File* file, const PageId PageNo)
 {
 
-	//Remove the page from the file
+	// Remove the page from the file
 	file->deletePage(PageNo);
 	
-	//Remove the associated frame in the bufferPool
+	// Remove the associated frame in the bufferPool
 	for(uint32_t i = 0; i < numBufs; i++){
 		if(bufDescTable[i].file == file && bufDescTable[i].pageNo == PageNo
 			&& bufDescTable[i].pinCnt == 0){
 			hashTable->remove(file, PageNo);
-			bufDescTable[i].Clear(); //reset buffer frame
+			// Reset buffer frame
+			bufDescTable[i].Clear(); 
 			break;
 		}
 	}

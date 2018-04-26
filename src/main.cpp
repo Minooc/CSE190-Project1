@@ -166,7 +166,7 @@ void testBufMgr()
 	test9();
 	test10();
 	test11();
-//	test12();
+	test12();
 
 	mytest();
 	}
@@ -480,6 +480,19 @@ void test11()
 	
 }
 
+void test12()
+{
+	// allocate 2 new pages
+	bufMgr->allocPage(file4ptr, pid[0], page);
+	bufMgr->allocPage(file4ptr, pid[1], page);
+
+	// unpin the allocated pages with different dirty bit values
+	bufMgr->unPinPage(file4ptr, pid[0], true);
+	bufMgr->unPinPage(file4ptr, pid[1], false);
+	
+	std::cout << "Test 12 passed" << "\n";
+}
+
 void mytest()
 {
 
@@ -509,8 +522,9 @@ void mytest()
 
 	// pinCnt 0 for frame 3,6,..,48 (16 left)
 	for (i = 0; i < num; i++){
-		if (i%3 == 0)
+		if (i%3 == 0){
 			bufMgr->unPinPage(file5ptr, i, true);
+		}
 	}
 
 	// allocate 10 out of 16 (6 left)
@@ -539,7 +553,7 @@ void mytest()
 	}
 
 
-	std::cout << "okay\n";
+	std::cout << "Passes additional test cases!\n";
 
 
 
